@@ -1,0 +1,166 @@
+{
+  "name": "IP Reputation Checker v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ip-check",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4f73b88b-48c0-49c8-b374-72e6221042a8",
+      "name": "Webhook",
+      "webhookId": "3b26eeb1-aa6b-4155-97aa-8cc82e7d02ee"
+    },
+    {
+      "parameters": {
+        "curlImport": "",
+        "httpVariantWarning": "",
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/ip_addresses/{{ $json.body.ip }}",
+        "": "",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "virusTotalApi",
+        "provideSslCertificates": false,
+        "sendQuery": false,
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "a8386049411d58a0f1b9284b1741e0a81f99ad83eebfb8d8ad317c746c43b6d3"
+            }
+          ]
+        },
+        "sendBody": false,
+        "options": {},
+        "infoMessage": ""
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "b47a183b-2404-42b1-97e6-a2b302001f0b",
+      "name": "VirusTotal HTTP Request",
+      "extendsCredential": "virusTotalApi",
+      "credentials": {
+        "virusTotalApi": {
+          "id": "8NUPUx0C2KcY3mdj",
+          "name": "VirusTotal account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ee60819d-691c-40a0-bbab-5be91e9a2a93",
+              "leftValue": "={{ $json.data.attributes.last_analysis_stats.malicious }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "1662b40e-9d4a-4777-8469-2577d7c0c04b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=🚨 MALICIOUS IP DETECTED\n\nIP Address: {{ $('Webhook').item.json.body.ip }}\nMalicious Detections: {{ $json.data.attributes.last_analysis_stats.malicious }}\nSuspicious: {{ $json.data.attributes.last_analysis_stats.suspicious }}\nNetwork: {{ $json.data.attributes.network }}\nCountry: {{ $json.data.attributes.country }}\nOwner: {{ $json.data.attributes.as_owner }}\n\n🔗 https://virustotal.com/gui/ip-address/{{ $('Webhook').item.json.body.ip }}\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -96
+      ],
+      "id": "90e4c2ab-8d8c-4eee-865b-6081e8bacd05",
+      "name": "Discord",
+      "webhookId": "1edf5938-5219-4470-b76b-a799213f301d",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "VirusTotal HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VirusTotal HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "db909253-2a7d-4ea6-970f-a5129414c279",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
+  },
+  "id": "uBFpDHfeg0prhQ1Q",
+  "tags": []
+}
