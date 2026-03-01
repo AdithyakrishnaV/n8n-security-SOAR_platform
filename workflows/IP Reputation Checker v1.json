@@ -10,8 +10,8 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        0,
-        0
+        -496,
+        16
       ],
       "id": "4f73b88b-48c0-49c8-b374-72e6221042a8",
       "name": "Webhook",
@@ -45,8 +45,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        208,
-        0
+        -336,
+        128
       ],
       "id": "b47a183b-2404-42b1-97e6-a2b302001f0b",
       "name": "VirusTotal HTTP Request",
@@ -70,8 +70,8 @@
           "conditions": [
             {
               "id": "ee60819d-691c-40a0-bbab-5be91e9a2a93",
-              "leftValue": "={{ $json.data.attributes.last_analysis_stats.malicious }}",
-              "rightValue": 5,
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 60,
               "operator": {
                 "type": "number",
                 "operation": "gt"
@@ -85,7 +85,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        416,
+        256,
         0
       ],
       "id": "1662b40e-9d4a-4777-8469-2577d7c0c04b",
@@ -94,14 +94,14 @@
     {
       "parameters": {
         "authentication": "webhook",
-        "content": "=🚨 MALICIOUS IP DETECTED\n\nIP Address: {{ $('Webhook').item.json.body.ip }}\nMalicious Detections: {{ $json.data.attributes.last_analysis_stats.malicious }}\nSuspicious: {{ $json.data.attributes.last_analysis_stats.suspicious }}\nNetwork: {{ $json.data.attributes.network }}\nCountry: {{ $json.data.attributes.country }}\nOwner: {{ $json.data.attributes.as_owner }}\n\n🔗 https://virustotal.com/gui/ip-address/{{ $('Webhook').item.json.body.ip }}\n\nSource: n8n Automated SOC Platform",
+        "content": "=🚨 THREAT ALERT — {{ $json.severity }}\n\nIP Address:     {{ $json.ip }}\nRisk Score:     {{ $json.riskScore }}/100\nSeverity:       {{ $json.severity }}\n\n━━━━━━━━━━━━━━━━━━━━\nVirusTotal:     {{ $json.vtMalicious }} malicious detections\nAbuseIPDB:      {{ $json.abuseScore }}/100 confidence score\nTor Exit Node:  {{ $json.isTor }}\nTotal Reports:  {{ $json.totalReports }}\nCountry:        {{ $json.country }}\nISP:            {{ $json.isp }}\nLast Reported:  {{ $json.lastReported }}\n━━━━━━━━━━━━━━━━━━━━\n\n🔗 https://virustotal.com/gui/ip-address/{{ $json.ip }}\n🔗 https://www.abuseipdb.com/check/{{ $json.ip }}\n\nSource: n8n Automated SOC Platform",
         "options": {}
       },
       "type": "n8n-nodes-base.discord",
       "typeVersion": 2,
       "position": [
-        624,
-        -96
+        448,
+        -64
       ],
       "id": "90e4c2ab-8d8c-4eee-865b-6081e8bacd05",
       "name": "Discord",
@@ -112,6 +112,58 @@
           "name": "Discord Webhook account 2"
         }
       }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.abuseipdb.com/api/v2/check?ipAddress={{ $json.body.ip }}&maxAgeInDays=90",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "16e189ad571cfd6f169f2cd0dbffff6a9f4559b85a1ac14dbf143714cea90851aec31496ce82f76d"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -320,
+        -96
+      ],
+      "id": "827e7c22-2c70-47eb-9d49-d9ec500e8598",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -144,
+        0
+      ],
+      "id": "b5950b0d-f53d-49bf-bd3f-90c8469b95bb",
+      "name": "Merge",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// AbuseIPDB \nconst abuseScore = item.data.abuseConfidenceScore;\nconst isTor = item.data.isTor;\nconst totalReports = item.data.totalReports;\nconst country = item.data.countryCode;\nconst isp = item.data.isp;\nconst ip = item.data.ipAddress;\nconst lastReported = item.data.lastReportedAt;\n\n// VirusTotal \nconst vtMalicious = item.data.attributes.last_analysis_stats.malicious;\nconst vtSuspicious = item.data.attributes.last_analysis_stats.suspicious;\n\n// risk score out of 100\nconst riskScore = Math.min(100, Math.round(\n  (vtMalicious * 1.5) +\n  (abuseScore * 0.4) +\n  (isTor ? 20 : 0) +\n  (totalReports > 50 ? 10 : 0)\n));\n\n// Severity label\nlet severity = \"LOW\";\nif (riskScore >= 80) severity = \"CRITICAL\";\nelse if (riskScore >= 60) severity = \"HIGH\";\nelse if (riskScore >= 40) severity = \"MEDIUM\";\n\nreturn [{\n  json: {\n    ip,\n    riskScore,\n    severity,\n    vtMalicious,\n    vtSuspicious,\n    abuseScore,\n    isTor,\n    totalReports,\n    country,\n    isp,\n    lastReported\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        0
+      ],
+      "id": "b2ee4a6e-0ef3-4b46-870d-b0871f6ab4eb",
+      "name": "Code in JavaScript"
     }
   ],
   "pinData": {},
@@ -119,6 +171,11 @@
     "Webhook": {
       "main": [
         [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "VirusTotal HTTP Request",
             "type": "main",
@@ -131,9 +188,9 @@
       "main": [
         [
           {
-            "node": "If",
+            "node": "Merge",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -148,6 +205,39 @@
           }
         ]
       ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -156,7 +246,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "db909253-2a7d-4ea6-970f-a5129414c279",
+  "versionId": "6bb1ee32-aa03-4ce1-bacb-a1c421861e4e",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
