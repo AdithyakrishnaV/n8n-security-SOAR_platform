@@ -1,0 +1,313 @@
+{
+  "name": "IP Reputation Checker v3",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ip-check",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -592,
+        16
+      ],
+      "id": "4f73b88b-48c0-49c8-b374-72e6221042a8",
+      "name": "Webhook",
+      "webhookId": "3b26eeb1-aa6b-4155-97aa-8cc82e7d02ee"
+    },
+    {
+      "parameters": {
+        "curlImport": "",
+        "httpVariantWarning": "",
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/ip_addresses/{{ $json.body.ip }}",
+        "": "",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "virusTotalApi",
+        "provideSslCertificates": false,
+        "sendQuery": false,
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "a8386049411d58a0f1b9284b1741e0a81f99ad83eebfb8d8ad317c746c43b6d3"
+            }
+          ]
+        },
+        "sendBody": false,
+        "options": {},
+        "infoMessage": ""
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -176,
+        96
+      ],
+      "id": "b47a183b-2404-42b1-97e6-a2b302001f0b",
+      "name": "VirusTotal HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "extendsCredential": "virusTotalApi",
+      "credentials": {
+        "virusTotalApi": {
+          "id": "8NUPUx0C2KcY3mdj",
+          "name": "VirusTotal account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ee60819d-691c-40a0-bbab-5be91e9a2a93",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        560,
+        16
+      ],
+      "id": "1662b40e-9d4a-4777-8469-2577d7c0c04b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=🚨 THREAT ALERT — {{ $json.severity }}\n\nIP Address:     {{ $json.ip }}\nRisk Score:     {{ $json.riskScore }}/100\nSeverity:       {{ $json.severity }}\n\n━━━━━━━━━━━━━━━━━━━━\nVirusTotal:     {{ $json.vtMalicious }} malicious detections\nAbuseIPDB:      {{ $json.abuseScore }}/100 confidence score\nTor Exit Node:  {{ $json.isTor }}\nTotal Reports:  {{ $json.totalReports }}\nCountry:        {{ $json.country }}\nISP:            {{ $json.isp }}\nLast Reported:  {{ $json.lastReported }}\n━━━━━━━━━━━━━━━━━━━━\n\n🔗 https://virustotal.com/gui/ip-address/{{ $json.ip }}\n🔗 https://www.abuseipdb.com/check/{{ $json.ip }}\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -128
+      ],
+      "id": "90e4c2ab-8d8c-4eee-865b-6081e8bacd05",
+      "name": "Discord",
+      "webhookId": "1edf5938-5219-4470-b76b-a799213f301d",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://api.abuseipdb.com/api/v2/check?ipAddress={{ $json.body.ip }}&maxAgeInDays=90",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "16e189ad571cfd6f169f2cd0dbffff6a9f4559b85a1ac14dbf143714cea90851aec31496ce82f76d"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -176,
+        -80
+      ],
+      "id": "827e7c22-2c70-47eb-9d49-d9ec500e8598",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        32,
+        16
+      ],
+      "id": "b5950b0d-f53d-49bf-bd3f-90c8469b95bb",
+      "name": "Merge",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// AbuseIPDB \nconst abuseScore = item.data.abuseConfidenceScore;\nconst isTor = item.data.isTor;\nconst totalReports = item.data.totalReports;\nconst country = item.data.countryCode;\nconst isp = item.data.isp;\nconst ip = item.data.ipAddress;\nconst lastReported = item.data.lastReportedAt;\n\n// VirusTotal \nconst vtMalicious = item.data.attributes.last_analysis_stats.malicious;\nconst vtSuspicious = item.data.attributes.last_analysis_stats.suspicious;\n\n// risk score out of 100\nconst riskScore = Math.min(100, Math.round(\n  (vtMalicious * 1.5) +\n  (abuseScore * 0.4) +\n  (isTor ? 20 : 0) +\n  (totalReports > 50 ? 10 : 0)\n));\n\n// Severity label\nlet severity = \"LOW\";\nif (riskScore >= 80) severity = \"CRITICAL\";\nelse if (riskScore >= 60) severity = \"HIGH\";\nelse if (riskScore >= 40) severity = \"MEDIUM\";\n\nreturn [{\n  json: {\n    ip,\n    riskScore,\n    severity,\n    vtMalicious,\n    vtSuspicious,\n    abuseScore,\n    isTor,\n    totalReports,\n    country,\n    isp,\n    lastReported\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        16
+      ],
+      "id": "b2ee4a6e-0ef3-4b46-870d-b0871f6ab4eb",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ip = $input.first().json.body.ip;\n\n// Check IP was provided\nif (!ip) {\n  throw new Error('No IP address provided in request body');\n}\n\n// Check valid IP format\nconst ipRegex = /^(\\d{1,3}\\.){3}\\d{1,3}$/;\nif (!ipRegex.test(ip)) {\n  throw new Error(`Invalid IP format: ${ip}`);\n}\n\n// Check each octet is 0-255\nconst parts = ip.split('.').map(Number);\nif (parts.some(p => p < 0 || p > 255)) {\n  throw new Error(`Invalid IP range: ${ip}`);\n}\n\n// Block private/internal IPs \nif (\n  parts[0] === 10 ||\n  parts[0] === 127 ||\n  parts[0] === 0 ||\n  (parts[0] === 192 && parts[1] === 168) ||\n  (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)\n) {\n  throw new Error(`Private IP skipped: ${ip}`);\n}\n\n// Valid public IP \nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        16
+      ],
+      "id": "d1cf90df-e5a0-4117-ab5b-e58614b42261",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=⚠️ WORKFLOW ERROR — IP Reputation Checker\n\nSomething went wrong during execution.\nCheck n8n execution logs for details.\n\nTime: {{ $now }}\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        864,
+        112
+      ],
+      "id": "af6eb2ac-af1c-4506-9047-258012a3187d",
+      "name": "Discord1",
+      "webhookId": "f3d490b7-66db-499e-b7db-9a1689ff5a1b",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VirusTotal HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discord1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VirusTotal HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "b759e261-28d3-40fd-9259-5cb48aa4ce9b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
+  },
+  "id": "uBFpDHfeg0prhQ1Q",
+  "tags": []
+}
