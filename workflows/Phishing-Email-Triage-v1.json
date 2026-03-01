@@ -1,0 +1,355 @@
+{
+  "name": "Phishing Email Triage v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "phishing-triage",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -832,
+        -96
+      ],
+      "id": "9ad71819-bdc6-48f4-8ffb-62a2af2d3968",
+      "name": "Webhook",
+      "webhookId": "cbeaf730-ae31-4fba-8ffc-c671b25cf7a3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\n// Check required fields\nif (!body.from) throw new Error('No sender email provided');\nif (!body.sender_ip) throw new Error('No sender IP provided');\nif (!body.body) throw new Error('No email body provided');\n\n// Basic email format check\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(body.from)) {\n  throw new Error(`Invalid sender email: ${body.from}`);\n}\n\n// Validate sender IP format\nconst ipRegex = /^(\\d{1,3}\\.){3}\\d{1,3}$/;\nif (!ipRegex.test(body.sender_ip)) {\n  throw new Error(`Invalid sender IP: ${body.sender_ip}`);\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -624,
+        -96
+      ],
+      "id": "3ea0f684-75ae-427c-b119-4cac84fdf5d0",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\nconst emailBody = body.body;\n\n// Extract all URLs from email body\nconst urlRegex = /https?:\\/\\/[^\\s\"'<>]+/gi;\nconst urls = emailBody.match(urlRegex) || [];\n\n// Remove duplicates\nconst uniqueUrls = [...new Set(urls)];\n\nif (uniqueUrls.length === 0) {\n  throw new Error('No URLs found in email body');\n}\n\n// Return one item per URL — this is key for the loop\nreturn uniqueUrls.map(url => ({\n  json: {\n    url,\n    from: body.from,\n    subject: body.subject,\n    sender_ip: body.sender_ip,\n    reported_by: body.reported_by,\n    timestamp: body.timestamp\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -416,
+        -96
+      ],
+      "id": "4d122377-acae-425f-aeae-3e61e95576f2",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const url = item.json.url;\n  \n  try {\n    // Parse the URL and get just the domain\n    const domain = url\n      .replace('https://', '')\n      .replace('http://', '')\n      .split('/')[0]\n      .split('?')[0]\n      .toLowerCase();\n\n    return {\n      json: {\n        ...item.json,\n        domain\n      }\n    };\n  } catch(e) {\n    return {\n      json: {\n        ...item.json,\n        domain: null\n      }\n    };\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -96
+      ],
+      "id": "4fad6f29-cadf-4500-a649-419e848ea637",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "curlImport": "",
+        "httpVariantWarning": "",
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/domains/{{ $json.domain }}",
+        "": "",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "virusTotalApi",
+        "provideSslCertificates": false,
+        "sendQuery": false,
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "a8386049411d58a0f1b9284b1741e0a81f99ad83eebfb8d8ad317c746c43b6d3"
+            }
+          ]
+        },
+        "sendBody": false,
+        "options": {},
+        "infoMessage": ""
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        -96
+      ],
+      "id": "7a5af0fe-d703-492a-8f02-b961e66a5793",
+      "name": "VirusTotal HTTP Request",
+      "extendsCredential": "virusTotalApi",
+      "credentials": {
+        "virusTotalApi": {
+          "id": "8NUPUx0C2KcY3mdj",
+          "name": "VirusTotal account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all URL scan results\nconst allItems = $input.all();\n\nlet totalMalicious = 0;\nlet totalSuspicious = 0;\nlet maliciousUrls = [];\nlet scannedDomains = [];\n\nallItems.forEach(item => {\n  const stats = item.json.data?.attributes?.last_analysis_stats;\n  const domain = item.json.data?.id;\n  \n  if (stats) {\n    totalMalicious += stats.malicious || 0;\n    totalSuspicious += stats.suspicious || 0;\n    scannedDomains.push(domain);\n    \n    if (stats.malicious > 0 || stats.suspicious > 0) {\n      maliciousUrls.push({\n        domain,\n        malicious: stats.malicious,\n        suspicious: stats.suspicious\n      });\n    }\n  }\n});\n\n// Get original email data from Webhook node\nconst emailData = $('Webhook').first().json.body;\n\nreturn [{\n  json: {\n    // Email details\n    from: emailData.from,\n    subject: emailData.subject,\n    sender_ip: emailData.sender_ip,\n    reported_by: emailData.reported_by,\n    timestamp: emailData.timestamp,\n    \n    // URL scan summary\n    totalUrlsScanned: scannedDomains.length,\n    totalMalicious,\n    totalSuspicious,\n    maliciousUrls,\n    scannedDomains,\n    \n    // Flag for next step\n    hasmaliciousUrls: maliciousUrls.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        -96
+      ],
+      "id": "7a2dfc31-44ae-450b-9dc1-c005d778b02f",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.abuseipdb.com/api/v2/check?ipAddress={{ $json.sender_ip }}&maxAgeInDays=90",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "16e189ad571cfd6f169f2cd0dbffff6a9f4559b85a1ac14dbf143714cea90851aec31496ce82f76d"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        -96
+      ],
+      "id": "11bc249f-b047-48bc-ab4a-0b60432205b1",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// Email summary from previous node\nconst aggregated = $('Code in JavaScript3').first().json;\n\n// AbuseIPDB sender IP data\nconst abuseScore = item.data.abuseConfidenceScore;\nconst isTor = item.data.isTor;\nconst totalReports = item.data.totalReports;\nconst country = item.data.countryCode;\nconst isp = item.data.isp;\n\n// URL scan results\nconst totalMalicious = aggregated.totalMalicious;\nconst totalSuspicious = aggregated.totalSuspicious;\nconst totalUrlsScanned = aggregated.totalUrlsScanned;\nconst maliciousUrls = aggregated.maliciousUrls;\n\n// Suspicious sender domain check\nconst senderDomain = aggregated.from.split('@')[1];\nconst suspiciousTlds = ['.ru', '.xyz', '.top', '.tk', '.ml', '.ga'];\nconst hasSuspiciousTld = suspiciousTlds.some(tld => \n  senderDomain.endsWith(tld)\n);\n\n// Phishing risk score\nconst riskScore = Math.min(100, Math.round(\n  (abuseScore * 0.30) +\n  (totalMalicious * 15) +\n  (totalSuspicious * 8) +\n  (isTor ? 20 : 0) +\n  (hasSuspiciousTld ? 15 : 0) +\n  (totalReports > 50 ? 10 : 0)\n));\n\nlet severity = \"LOW\";\nif (riskScore >= 80) severity = \"CRITICAL\";\nelse if (riskScore >= 60) severity = \"HIGH\";\nelse if (riskScore >= 40) severity = \"MEDIUM\";\n\nreturn [{\n  json: {\n    // Email info\n    from: aggregated.from,\n    subject: aggregated.subject,\n    sender_ip: aggregated.sender_ip,\n    reported_by: aggregated.reported_by,\n    senderDomain,\n    hasSuspiciousTld,\n\n    // Risk assessment\n    riskScore,\n    severity,\n\n    // URL results\n    totalUrlsScanned,\n    totalMalicious,\n    totalSuspicious,\n    maliciousUrls,\n    scannedDomains: aggregated.scannedDomains,\n\n    // Sender IP intel\n    abuseScore,\n    isTor,\n    totalReports,\n    country,\n    isp\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -96
+      ],
+      "id": "3795fe25-1f49-45f2-ad07-b2f442a42b41",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "87411aab-6bd5-49c2-be11-1b039cfb376c",
+              "leftValue": "={{ $json.riskScore }}",
+              "rightValue": 40,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        832,
+        -96
+      ],
+      "id": "53a0da34-404c-40ae-a41b-9d31353d0bca",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=🎣 PHISHING EMAIL DETECTED — {{ $json.severity }}\n\nFrom:         {{ $json.from }}\nSubject:      {{ $json.subject }}\nReported By:  {{ $json.reported_by }}\n\n━━━━━━━━━━━━━━━━━━━━\nRisk Score:      {{ $json.riskScore }}/100\nSender Domain:   {{ $json.senderDomain }}\nSuspicious TLD:  {{ $json.hasSuspiciousTld }}\nSender IP:       {{ $json.sender_ip }}\nAbuseIPDB Score: {{ $json.abuseScore }}/100\nTor Exit Node:   {{ $json.isTor }}\nCountry:         {{ $json.country }}\n━━━━━━━━━━━━━━━━━━━━\n\nURLs Scanned:    {{ $json.totalUrlsScanned }}\nMalicious URLs:  {{ $json.totalMalicious }}\nSuspicious URLs: {{ $json.totalSuspicious }}\nDomains Found:   {{ $json.scannedDomains }}\n\n🔗 https://www.abuseipdb.com/check/{{ $json.sender_ip }}\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -192
+      ],
+      "id": "62f2dc73-2d61-406f-8367-f08a773cb652",
+      "name": "Discord",
+      "webhookId": "ca5f887b-57c8-4cb5-b02a-acc46c8dcbfa",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=✅ EMAIL CLEARED — LOW RISK\n\nFrom:         {{ $json.from }}\nSubject:      {{ $json.subject }}\nReported By:  {{ $json.reported_by }}\n\n━━━━━━━━━━━━━━━━━━━━\nRisk Score:      {{ $json.riskScore }}/100\nSeverity:        {{ $json.severity }}\nSender IP:       {{ $json.sender_ip }}\nAbuseIPDB Score: {{ $json.abuseScore }}/100\nTor Exit Node:   {{ $json.isTor }}\nURLs Scanned:    {{ $json.totalUrlsScanned }}\nMalicious URLs:  {{ $json.totalMalicious }}\n━━━━━━━━━━━━━━━━━━━━\n\nNo immediate action required.\nEmail has been logged for audit trail.\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "c65fef2e-7564-45f1-af15-4d8fd09f3b63",
+      "name": "Discord1",
+      "webhookId": "9d1a4cc5-10ee-48be-82ee-8918a9f01847",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "VirusTotal HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VirusTotal HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Discord1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1fbb14d2-b13f-4cc2-8298-dcc02a4fd1a0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
+  },
+  "id": "dX6bIQP9nFlgM37Q",
+  "tags": []
+}
