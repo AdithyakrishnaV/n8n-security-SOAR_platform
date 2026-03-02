@@ -1,0 +1,247 @@
+{
+  "name": "Threat Intel Feed v1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1408,
+        112
+      ],
+      "id": "157239c9-7488-453e-bf57-52f3c8efb6d7",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://otx.alienvault.com/api/v1/pulses/subscribed?limit=10&page=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-OTX-API-KEY",
+              "value": "70252cbd4ac2ca2bc88478cdac9f83ed5d0493178fe084cee6e02aa12dc480a5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1184,
+        176
+      ],
+      "id": "9c1c612f-081b-44b9-a218-c2c0a6ce6984",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst pulses = response.results || [];\n\nlet domains = [];\nlet ips = [];\nlet urls = [];\nlet hashes = [];\n\n// Loop through each pulse and extract indicators\npulses.forEach(pulse => {\n  const indicators = pulse.indicators || [];\n  const pulseName = pulse.name;\n  const adversary = pulse.adversary || 'Unknown';\n  \n  indicators.forEach(indicator => {\n    const ioc = {\n      value: indicator.indicator,\n      type: indicator.type,\n      pulse: pulseName,\n      adversary,\n      created: indicator.created\n    };\n\n    if (indicator.type === 'domain') domains.push(ioc);\n    else if (indicator.type === 'IPv4') ips.push(ioc);\n    else if (indicator.type === 'URL') urls.push(ioc);\n    else if (['MD5','SHA256','SHA1'].includes(indicator.type)) hashes.push(ioc);\n  });\n});\n\n// Summary stats\nconst totalIOCs = domains.length + ips.length + urls.length + hashes.length;\n\nreturn [{\n  json: {\n    fetchedAt: new Date().toISOString(),\n    totalIOCs,\n    totalDomains: domains.length,\n    totalIPs: ips.length,\n    totalURLs: urls.length,\n    totalHashes: hashes.length,\n    domains,\n    ips,\n    urls,\n    hashes\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        176
+      ],
+      "id": "20fcb5d1-1396-45c7-9df9-34d920fa588d",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "https://urlhaus-api.abuse.ch/v1/urls/recent/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Auth-Key",
+              "value": "5a35c714d94a35bb841c597c48f476673bd2bac463b8a455"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1184,
+        0
+      ],
+      "id": "dc72a186-2c73-4fdb-8e0f-f397f10c433a",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst urls = response.urls || [];\n\n// Extract unique malicious IPs and URLs\nlet maliciousIPs = [];\nlet maliciousURLs = [];\n\nurls.forEach(entry => {\n  if (entry.url_status === 'online') {\n    maliciousURLs.push({\n      url: entry.url,\n      host: entry.host,\n      threat: entry.threat,\n      tags: entry.tags || [],\n      reported: entry.date_added,\n      reference: entry.urlhaus_reference\n    });\n\n    // Extract IP if host is an IP address\n    const ipRegex = /^(\\d{1,3}\\.){3}\\d{1,3}$/;\n    if (ipRegex.test(entry.host)) {\n      maliciousIPs.push({\n        ip: entry.host,\n        threat: entry.threat,\n        tags: entry.tags || [],\n        reported: entry.date_added\n      });\n    }\n  }\n});\n\n// Deduplicate IPs\nconst uniqueIPs = [...new Map(\n  maliciousIPs.map(item => [item.ip, item])\n).values()];\n\nreturn [{\n  json: {\n    source: 'Abuse.ch URLhaus',\n    fetchedAt: new Date().toISOString(),\n    totalURLs: maliciousURLs.length,\n    totalMaliciousIPs: uniqueIPs.length,\n    maliciousURLs,\n    maliciousIPs: uniqueIPs\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        0
+      ],
+      "id": "a5a26461-bd70-4a5a-8e71-45be50b721b1",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -784,
+        80
+      ],
+      "id": "f352ac4c-1f51-4809-988e-8f8af6ea62d0",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\n// Data is already merged into one item\n// AlienVault data\nconst otxDomains = item.domains || [];\nconst otxIPs = item.ips || [];\nconst otxURLs = item.urls || [];\n\n// Abuse.ch data\nconst abuseIPs = item.maliciousIPs || [];\nconst abuseURLs = item.maliciousURLs || [];\n\n// Combine all IPs\nconst allIPs = [...otxIPs, ...abuseIPs];\nconst allDomains = [...otxDomains];\nconst allURLs = [...otxURLs, ...abuseURLs];\n\n// Deduplicate IPs\nconst uniqueIPs = [...new Map(\n  allIPs.map(i => [i.ip || i.value, i])\n).values()];\n\n// Deduplicate domains\nconst uniqueDomains = [...new Map(\n  allDomains.map(d => [d.value, d])\n).values()];\n\n// Top 5 preview for Discord\nconst topIPs = uniqueIPs.slice(0, 5)\n  .map(i => `${i.ip || i.value} (${i.threat || 'malicious'})`)\n  .join('\\n');\n\nconst topDomains = uniqueDomains.slice(0, 5)\n  .map(d => `${d.value} (${d.adversary || 'unknown'})`)\n  .join('\\n');\n\nconst totalIOCs = uniqueIPs.length + uniqueDomains.length + allURLs.length;\n\nreturn [{\n  json: {\n    fetchedAt: new Date().toISOString(),\n    totalIOCs,\n    totalIPs: uniqueIPs.length,\n    totalDomains: uniqueDomains.length,\n    totalURLs: allURLs.length,\n    topIPs,\n    topDomains,\n    uniqueIPs,\n    uniqueDomains,\n    allURLs\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        80
+      ],
+      "id": "2f1543cc-9fca-420e-a23b-f49ce6ad9ceb",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=🛡️ THREAT INTEL UPDATE — {{ $json.fetchedAt }}\n\n━━━━━━━━━━━━━━━━━━━━\n📊 IOCs Collected This Run\nTotal IOCs:       {{ $json.totalIOCs }}\nMalicious IPs:    {{ $json.totalIPs }}\nMalicious Domains: {{ $json.totalDomains }}\nMalicious URLs:   {{ $json.totalURLs }}\n━━━━━━━━━━━━━━━━━━━━\n\n🔴 Top Malicious IPs\n{{ $json.topIPs }}\n\n🌐 Top Malicious Domains\n{{ $json.topDomains }}\n\n━━━━━━━━━━━━━━━━━━━━\nSources: AlienVault OTX + Abuse.ch URLhaus\nNext run: 4 hours\n\nSource: n8n Automated SOC Platform",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        -368,
+        80
+      ],
+      "id": "e7d0736c-4744-4a64-a09c-347e573ad8ba",
+      "name": "Discord",
+      "webhookId": "ec4685b8-9779-4232-aeef-d6a17830a058",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "Bj5e3rfsf14sdiGV",
+          "name": "Discord Webhook account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "eb437275-3d63-4d50-bdff-00fe51b3b0a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
+  },
+  "id": "TQiXG2nXfutDh6kH",
+  "tags": []
+}
