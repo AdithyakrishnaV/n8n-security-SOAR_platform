@@ -1,0 +1,155 @@
+{
+  "name": "Executive Dashboard v1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c4ca556f-a2aa-452c-aa17-6360b734b4ce",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "execution",
+        "filters": {},
+        "options": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -176
+      ],
+      "id": "2021ba8f-a1de-47e9-8683-3aa5ed290e15",
+      "name": "Get many executions"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn [{\n  json: {\n    week_start: '2026-02-23',\n    week_end: '2026-03-02',\n    \n    // Incident counts\n    total_incidents: 47,\n    critical_incidents: 3,\n    high_incidents: 12,\n    medium_incidents: 32,\n\n    // Response times (minutes)\n    mttr: 12,  // Mean Time To Respond\n    mttd: 8,   // Mean Time To Detect\n\n    // Playbook breakdown\n    playbooks: {\n      ip_checker: 31,\n      brute_force: 23,\n      phishing: 18,\n      vuln_management: 4\n    },\n\n    // Top threats\n    top_threats: [\n      { type: 'Brute Force', count: 23 },\n      { type: 'Phishing', count: 18 },\n      { type: 'Suspicious IP', count: 6 }\n    ],\n\n    // This week's critical hits\n    critical_events: [\n      { name: 'Log4Shell detected', host: 'prod-webserver-01', severity: 'CRITICAL' },\n      { name: 'SSH brute force', host: 'prod-db-01', severity: 'CRITICAL' },\n      { name: 'Phishing campaign', host: 'email-gateway', severity: 'CRITICAL' }\n    ]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "186233f5-cb5d-42eb-be7d-3fa6a685a500",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "content": "-> Simulated weekly incident data\n\n-> In production this would come from real n8n executions\n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        144,
+        144
+      ],
+      "typeVersion": 1,
+      "id": "3c2a8e98-e3b8-4a9b-b56d-a6112af3574e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\nconst html = `\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  body { font-family: Arial, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 20px; }\n  .container { max-width: 800px; margin: 0 auto; }\n  .header { background: #161b22; border-left: 4px solid #f85149; padding: 20px; margin-bottom: 20px; border-radius: 6px; }\n  .header h1 { margin: 0; color: #f85149; font-size: 24px; }\n  .header p { margin: 5px 0 0; color: #8b949e; }\n  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }\n  .card { background: #161b22; padding: 20px; border-radius: 6px; text-align: center; border: 1px solid #30363d; }\n  .card .number { font-size: 42px; font-weight: bold; color: #f85149; }\n  .card .number.green { color: #3fb950; }\n  .card .number.yellow { color: #d29922; }\n  .card .label { color: #8b949e; font-size: 13px; margin-top: 5px; }\n  .section { background: #161b22; border-radius: 6px; padding: 20px; margin-bottom: 20px; border: 1px solid #30363d; }\n  .section h2 { margin: 0 0 15px; color: #e6edf3; font-size: 16px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }\n  .threat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; }\n  .threat-row:last-child { border-bottom: none; }\n  .bar { background: #21262d; border-radius: 4px; height: 8px; flex: 1; margin: 0 15px; }\n  .bar-fill { background: #f85149; height: 8px; border-radius: 4px; }\n  .critical-badge { background: #f8514922; color: #f85149; padding: 3px 10px; border-radius: 20px; font-size: 12px; border: 1px solid #f8514944; }\n  .event-row { padding: 10px 0; border-bottom: 1px solid #21262d; display: flex; justify-content: space-between; }\n  .event-row:last-child { border-bottom: none; }\n  .footer { text-align: center; color: #8b949e; font-size: 12px; margin-top: 20px; }\n</style>\n</head>\n<body>\n<div class=\"container\">\n\n  <div class=\"header\">\n    <h1>🛡️ Weekly Security Report</h1>\n    <p>Week of ${d.week_start} → ${d.week_end} | Generated automatically by n8n Security Platform</p>\n  </div>\n\n  <div class=\"grid\">\n    <div class=\"card\">\n      <div class=\"number\">${d.total_incidents}</div>\n      <div class=\"label\">Total Incidents</div>\n    </div>\n    <div class=\"card\">\n      <div class=\"number\">${d.critical_incidents}</div>\n      <div class=\"label\">Critical Incidents</div>\n    </div>\n    <div class=\"card\">\n      <div class=\"number green\">${d.mttr}m</div>\n      <div class=\"label\">Avg Response Time (MTTR)</div>\n    </div>\n    <div class=\"card\">\n      <div class=\"number yellow\">${d.mttd}m</div>\n      <div class=\"label\">Avg Detection Time (MTTD)</div>\n    </div>\n    <div class=\"card\">\n      <div class=\"number\">${d.high_incidents}</div>\n      <div class=\"label\">High Incidents</div>\n    </div>\n    <div class=\"card\">\n      <div class=\"number green\">${d.medium_incidents}</div>\n      <div class=\"label\">Medium Incidents</div>\n    </div>\n  </div>\n\n  <div class=\"section\">\n    <h2>🔥 Top Threats This Week</h2>\n    ${d.top_threats.map(t => `\n    <div class=\"threat-row\">\n      <span style=\"width:140px\">${t.type}</span>\n      <div class=\"bar\"><div class=\"bar-fill\" style=\"width:${Math.round((t.count/d.total_incidents)*100)}%\"></div></div>\n      <span style=\"width:30px;text-align:right\">${t.count}</span>\n    </div>`).join('')}\n  </div>\n\n  <div class=\"section\">\n    <h2>⚡ Playbook Activity</h2>\n    <div class=\"threat-row\"><span>IP Reputation Checker</span><span>${d.playbooks.ip_checker} triggers</span></div>\n    <div class=\"threat-row\"><span>Brute Force Detection</span><span>${d.playbooks.brute_force} triggers</span></div>\n    <div class=\"threat-row\"><span>Phishing Triage</span><span>${d.playbooks.phishing} triggers</span></div>\n    <div class=\"threat-row\"><span>Vulnerability Management</span><span>${d.playbooks.vuln_management} triggers</span></div>\n  </div>\n\n  <div class=\"section\">\n    <h2>🚨 Critical Events</h2>\n    ${d.critical_events.map(e => `\n    <div class=\"event-row\">\n      <span>${e.name}</span>\n      <span style=\"color:#8b949e\">${e.host}</span>\n      <span class=\"critical-badge\">${e.severity}</span>\n    </div>`).join('')}\n  </div>\n\n  <div class=\"footer\">\n    Generated by n8n Security Platform • ${new Date().toISOString()}\n  </div>\n\n</div>\n</body>\n</html>`;\n\nreturn [{ json: { html_report: html.replace(/\\n/g, '').replace(/\\s+/g, ' ') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "d2d3b425-4748-4156-a0c8-531bcbbf025e",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "fromEmail": "security@company.com",
+        "toEmail": "ciso@company.com",
+        "subject": "=🛡️ Weekly Security Report — Week of {{ $('Code in JavaScript').first().json.week_start }}",
+        "html": "={{ $json.html_report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "9fdc4cfa-87bf-476d-b2db-5246ff9b4bdb",
+      "name": "Send an Email",
+      "webhookId": "4bdd058d-7a6e-44a5-bdaa-2f638eda820f",
+      "credentials": {
+        "smtp": {
+          "id": "T5Jvl5nuwsxEV0EI",
+          "name": "SMTP account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "67c57d83-1d0c-4d04-a23a-d56bfb725550",
+  "meta": {
+    "instanceId": "bc2c55c79e74f8ec426f0fea3e9ebec886572f79aa46262e02d874c958db36b4"
+  },
+  "id": "A1VFIbYMVlKiERth",
+  "tags": []
+}
